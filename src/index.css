@@ -1,0 +1,18 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    font-family: "Roboto", "sans-serif";
+}
+
+.btn-primary {
+    @apply px-4 py-2 text-white transition-colors bg-blue-700 rounded outline-none hover:bg-blue-800;
+}
+
+@media print {
+    body {
+        @apply invisible;
+    }
+}
