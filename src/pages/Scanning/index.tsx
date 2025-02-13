@@ -11,7 +11,6 @@ import { useAuth } from "../../contexts/AuthContext";
 import beep_alert from "../../assets/audio/beep-alert.mp3";
 import beep_error from "../../assets/audio/beep-error.mp3";
 import { DDMMYYYY } from "../../utils/date";
-
 type TPostPackageBody = {
     task_id: string,
     package_id: string,
@@ -22,6 +21,7 @@ type TPostPackageBody = {
 type TScannedPackageListRecord = {
     _id?: string,
     package_id: string,
+    status: string,
     timestamp: Date,
     remarks?: string,
     cancelled?: boolean,
@@ -32,11 +32,13 @@ const Scanning = () => {
 
     const { id } = useParams();
     const location = useLocation();
-    const { token, logout } = useAuth();
+    const { token, logout, user } = useAuth();
     const packageIdInputRef = useRef<HTMLInputElement | null>(null);
+
     const [scannedPackageListSearch, setScannedPackageListSearch] = useState<string>("");
     const [scannedPackageListMap, setScannedPackageListMap] = useState<Map<string, TScannedPackageListRecord>>(new Map());
-
+    const [expectedPackages, setExpectedPackages] = useState<Map<string, boolean>>(new Map());
+    const [expectedPackagesInput, setExpectedPackagesInput] = useState<string>("");
     const [scanPackageFormData, setScanPackageFormData] = useState<TPostPackageBody>({
         task_id: id as string,
         package_id: "",
@@ -44,8 +46,27 @@ const Scanning = () => {
         cancelled: false
     });
     const tasktype: ("outgoing" | "incoming") = location.pathname.split("/")[1] === "incoming" ? "incoming" : "outgoing";
-
     const { response, loading, count, refresh } = useFetch<TTaskPopulated | null>(`/v1/tasks/${id}?fields=package_id,cancelled,remarks,created_at`, null);
+    const [matchedCount, setMatchedCount] = useState(0);
+    const [notMatchedCount, setNotMatchedCount] = useState(0);
+    const [showAlertOnMismatch, setShowAlertOnMismatch] = useState<boolean>(true);
+
+
+    useEffect(() => {
+        if (response && response.packages) {
+            console.log("📥 Response Updated:", response.packages);
+
+            const matched = response.packages.filter(pkg => pkg.status === "matched").length;
+            const notMatched = response.packages.filter(pkg => pkg.status === "notmatched").length;
+
+            console.log("✅ Matched Count:", matched);
+            console.log("❌ Not Matched Count:", notMatched);
+
+            // ✅ Ensure state updates correctly
+            setMatchedCount(matched);
+            setNotMatchedCount(notMatched);
+        }
+    }, [response]); // ✅ Re-run this effect whenever `response` changes
 
     // populate scanned packages list with pre-scanned packages
     useEffect(() => {
@@ -57,6 +78,7 @@ const Scanning = () => {
                         {
                             _id: record._id,
                             package_id: record.package_id,
+                            status: record.status || "notmatched", // Ensure status is always present
                             timestamp: record.created_at,
                             remarks: record.remarks || "NA",
                             cancelled: record.cancelled,
@@ -68,54 +90,189 @@ const Scanning = () => {
         }
     }, [response]);
 
-    const handleSubmit = async (event: FormEvent) => {
+    useEffect(() => {
+        const fetchExpectedPackages = async () => {
+            try {
+                const response = await fetch(new URL(`/v1/expected-packages/${id}`, import.meta.env.VITE_API_BASE_URL), {
+                    headers: { "Authorization": `Bearer ${token}` }
+                });
+
+                if (!response.ok) {
+                    console.error("Failed to fetch expected packages.");
+                    return;
+                }
+
+                const data = await response.json();
+
+                // ✅ Convert API response into a Map
+                const expectedPackagesMap = new Map<string, boolean>(
+                    data.packages.map((pkg: { package_id: string }) => [pkg.package_id, false])
+                );
+
+                // ✅ Update Expected Packages State
+                setExpectedPackages(new Map(expectedPackagesMap));
+
+                // ✅ Now update the scanned package list to check for matches
+                setScannedPackageListMap(prevScannedPackages => {
+                    const updatedScannedMap = new Map(prevScannedPackages);
+
+                    updatedScannedMap.forEach((pkg, package_id) => {
+                        updatedScannedMap.set(package_id, {
+                            ...pkg,
+                            status: expectedPackagesMap.has(package_id) ? "matched" : "notmatched"
+                        });
+                    });
+
+                    return new Map(updatedScannedMap); // Ensure React detects the state change
+                });
+
+                console.log("✅ Expected Packages Fetched & Scanned List Updated");
+
+            } catch (error) {
+                console.error("Error fetching expected packages:", error);
+            }
+        };
+
+        fetchExpectedPackages();
+    }, [id, token]); // Runs when `id` or `token` changes
+
+
+
+
+    const handleExpectedPackageSubmit = async (event: FormEvent) => {
         event.preventDefault();
-        if(tasktype === "outgoing") {
-            scanPackageFormData.package_id += "_"
-        }
-        // check if package_id already exists in scanned list
-        if (scannedPackageListMap.get(scanPackageFormData.package_id) || scannedPackageListMap.get(scanPackageFormData.package_id.toUpperCase()) || scannedPackageListMap.get(scanPackageFormData.package_id.toLowerCase())) {
-            new Audio(beep_error).play();
-            setScanPackageFormData({
-                task_id: id as string,
-                package_id: "",
-                remarks: "",
-                cancelled: false
-            });
+
+        // ✅ Split by line, trim whitespace, filter out empty lines
+        const packageIds = expectedPackagesInput
+            .split("\n") // Split by newline
+            .map(id => id.trim()) // Trim each line
+            .filter(id => id.length >= 6); // ✅ Ensure at least 6 characters
+
+        // console.log("🚀 Package IDs after processing:", packageIds); // ✅ Debug Log
+
+        if (packageIds.length === 0) {
+            toast.error("No valid package IDs entered. Each package ID must be at least 6 characters.");
             return;
         }
 
-        // add to scanned list with pending sync
+        try {
+            // console.log("📤 Sending request to API...", { task_id: id, package_ids: packageIds, executive: user?.sub }); // ✅ Debug Log
+
+            const response = await fetch(new URL(`/v1/expected-packages`, import.meta.env.VITE_API_BASE_URL), {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ task_id: id, package_ids: packageIds, executive: user?.sub })
+            });
+
+            if (!response.ok) {
+                const errorResponse = await response.json();
+                console.error("❌ API Error:", errorResponse); // ✅ Debug API response
+                toast.error(errorResponse.message || "Failed to save expected packages.");
+                return;
+            }
+
+            const data = await response.json();
+            // console.log("✅ API Response:", data); // ✅ Debugging Log
+
+            // ✅ Use the response data to update expected packages
+            setExpectedPackages(prev => {
+                const updatedMap = new Map(prev);
+                data.packages.forEach((pkg: { package_id: string }) => updatedMap.set(pkg.package_id, false)); // ✅ Fix: Explicitly type `pkg`
+                return updatedMap;
+            });
+
+            // ✅ Call backend to update scanned packages to "matched"
+            await fetch(new URL(`/v1/packages/match-expected`, import.meta.env.VITE_API_BASE_URL), {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+                body: JSON.stringify({ task_id: id, package_ids: packageIds })
+            });
+
+            // ✅ Refresh the scanned package list after updating status
+            refresh();
+
+            setExpectedPackagesInput("");
+
+        } catch (error) {
+            console.error("❌ Error submitting expected packages:", error);
+            toast.error("Something went wrong. Please try again.");
+        }
+    };
+
+
+    const handleSubmit = async (event: FormEvent) => {
+        event.preventDefault();
+        let packageId = scanPackageFormData.package_id.trim();
+
+        if (tasktype === "outgoing") {
+            packageId += "_"; // Append "_" to outgoing packages
+        }
+
+        // Check if package is already scanned (case-insensitive)
+        if (
+            scannedPackageListMap.has(packageId) ||
+            scannedPackageListMap.has(packageId.toUpperCase()) ||
+            scannedPackageListMap.has(packageId.toLowerCase())
+        ) {
+            new Audio(beep_error).play();
+            toast.error(`Package ${packageId} is already scanned!`);
+            setScanPackageFormData({ task_id: id as string, package_id: "", remarks: "", cancelled: false });
+            return;
+        }
+
+        // Determine if package exists in expected list
+        const isMatched = expectedPackages.has(packageId);
+        const status = isMatched ? "matched" : "notmatched";
+
+        if (!isMatched) {
+            new Audio(beep_error).play();
+
+            if (showAlertOnMismatch) {
+                // Show a blocking alert
+                window.alert(`❌ ${packageId} is NOT in the expected list!`);
+            } else {
+                // Show toast instead of alert
+                toast.error(`❌ ${packageId} is NOT in the expected list!`);
+            }
+
+            // ✅ Refocus on the package ID input field after the alert or toast
+            packageIdInputRef.current?.focus();
+        } else {
+            new Audio(beep_alert).play();
+        }
+
+
+
+        // Add package to scanned list with match status (pending sync)
         setScannedPackageListMap(prev => {
-            prev.set(
-                scanPackageFormData.package_id,
-                {
-                    package_id: scanPackageFormData.package_id,
-                    timestamp: new Date(),
-                    remarks: scanPackageFormData.remarks,
-                    cancelled: scanPackageFormData.cancelled,
-                    synced: false
-                }
-            );
-            return prev;
+            prev.set(packageId, {
+                package_id: packageId,
+                timestamp: new Date(),
+                remarks: scanPackageFormData.remarks,
+                cancelled: scanPackageFormData.cancelled,
+                synced: false,
+                status
+            });
+            return new Map(prev);
         });
 
-        // clear scan package form data
-        const postPacakgeRequestData = scanPackageFormData;
-        setScanPackageFormData({
-            task_id: id as string,
-            package_id: "",
-            remarks: "",
-            cancelled: false
-        });
-
-        // ok beep
-        new Audio(beep_alert).play();
-
-        // re-focus on package id input 
+        // Clear input and refocus
+        setScanPackageFormData({ task_id: id as string, package_id: "", remarks: "", cancelled: false });
         packageIdInputRef.current?.focus();
 
-        // POST package
+        // Prepare data for backend submission
+        const postPackageRequestData = {
+            task_id: id,
+            package_id: packageId,
+            remarks: scanPackageFormData.remarks,
+            cancelled: scanPackageFormData.cancelled,
+            status // Send status from frontend
+        };
+
+        // Send package data to backend
         try {
             const response = await fetch(new URL("/v1/packages", import.meta.env.VITE_API_BASE_URL), {
                 method: "POST",
@@ -123,17 +280,19 @@ const Scanning = () => {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`
                 },
-                body: JSON.stringify(postPacakgeRequestData)
+                body: JSON.stringify(postPackageRequestData)
             });
+
             if (!response.ok) {
                 if (CODE[response.status]) toast.error(CODE[response.status].message);
                 if (response.status === 401) logout();
-                console.error(`Request to POST:/v1/packages failed with status ${response.status}`);
+                console.error(`Request to POST /v1/packages failed with status ${response.status}`);
                 return;
             }
+
             const json: { message: string, data: TPackage } = await response.json();
 
-            // update package with server response
+            // Update scanned package list with server response (Synced ✅)
             setScannedPackageListMap(prev => (
                 new Map(prev.set(json.data.package_id, {
                     _id: json.data._id,
@@ -141,15 +300,16 @@ const Scanning = () => {
                     timestamp: json.data.created_at,
                     remarks: json.data.remarks || "NA",
                     cancelled: response.status === 201 ? json.data.cancelled : true,
-                    synced: true
+                    synced: true,
+                    status
                 }))
             ));
 
-
         } catch (err) {
-            console.error(`Request to POST:/v1/packages failed with error ${err}`);
+            console.error(`Request to POST /v1/packages failed with error ${err}`);
         }
-    }
+    };
+
 
     const handleDelete = async (id: string, package_id: string) => {
         try {
@@ -209,7 +369,8 @@ const Scanning = () => {
                     timestamp: json.data.created_at,
                     remarks: json.data.remarks || "NA",
                     cancelled: json.data.cancelled,
-                    synced: true
+                    synced: true,
+                    status: json.data.status || "notmatched" // ✅ Ensure status is included
                 }))
             ));
         } catch (err) {
@@ -244,110 +405,174 @@ const Scanning = () => {
         document.title = "StarAndDaisy - Package Tracker"
     }
 
+    // Compare Scanned Packages with Expected
+    useEffect(() => {
+        setExpectedPackages(prev => {
+            const updated = new Map(prev);
+            scannedPackageListMap.forEach((_, package_id) => {
+                if (updated.has(package_id)) updated.set(package_id, true); // Mark as scanned
+            });
+            return updated;
+        });
+    }, [scannedPackageListMap]);
+
     return (
-        loading && count === 0 ? <PageLoading /> : <div>
-            <div className="flex p-8 gap-x-16">
-                <div className="w-4/12">
-                    {response && <TaskDetailCard
+        loading && count === 0 ? <PageLoading /> :
+            <div>
+                <div>
+                    <div className="flex p-8 gap-x-16">
+                        <div className="w-4/12">
+                            {response && <TaskDetailCard
+                                task_id={response.task_id}
+                                courier={response.courier}
+                                channel={response.channel}
+                                type={response.type}
+                                delex_name={response.delex_name}
+                                delex_contact={response.delex_contact}
+                                vehicle_no={response.vehicle_no}
+                                created_by={response.created_by}
+                                created_at={response.created_at}
+                                scanned={scannedPackageListMap.size}
+                                notMatchedCount={notMatchedCount}
+                                matchedCount={matchedCount}
+                                expected_scanned={expectedPackages.size}
+                                cancelled={[...scannedPackageListMap.values()].filter(obj => obj.cancelled).length}
+                                printReport={printReport}
+                            />}
+                            <div className="mb-2 text-xl font-bold">Scan Here</div>
+                            <form className="p-2 border rounded border-neutral-300" onSubmit={handleSubmit}>
+                                <div className="flex gap-2 mb-2">
+                                    <input
+                                        ref={packageIdInputRef}
+                                        type="text"
+                                        name="package_id"
+                                        placeholder="Package ID"
+                                        value={scanPackageFormData.package_id}
+                                        onChange={handleInputChange}
+                                        required
+                                        pattern="^\w{6,}$"
+                                        title="Minimum 6 digits required"
+                                        className="w-full p-2 text-sm border rounded border-neutral-300 outline-red-500"
+                                    />
+                                    <button type="submit" className="text-sm btn-primary">Submit</button>
+                                </div>
+                                <div>
+                                    <input
+                                        placeholder="Remarks"
+                                        name="remarks"
+                                        value={scanPackageFormData.remarks}
+                                        onChange={handleInputChange}
+                                        className="w-full p-2 text-sm border rounded border-neutral-300"
+                                    />
+                                </div>
+                                <div className={`flex items-center ${tasktype === "outgoing" ? "justify-between" : "justify-end"}`}>
+                                    {(tasktype === "outgoing") && <div className="flex items-center mt-2">
+                                        <input
+                                            type="checkbox"
+                                            id="cancelled"
+                                            name="cancelled"
+                                            value="cancel"
+                                            onChange={() => {
+                                                setScanPackageFormData(prev => ({
+                                                    ...prev,
+                                                    cancelled: !prev.cancelled
+                                                }));
+                                            }}
+                                            checked={scanPackageFormData.cancelled}
+                                            className="w-4 h-4 accent-red-500"
+                                        />
+                                        <label htmlFor="cancelled" className="px-1 text-sm font-medium text-red-600 rounded cursor-pointer select-none">Cancelled</label>
+
+                                    </div>}
+                                </div>
+                            </form>
+                        </div>
+                        <div className="w-8/12">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="text-xl font-bold">Scanned List</div>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm font-medium">Show Alert on Mismatch:</label>
+                                    <input
+                                        type="checkbox"
+                                        checked={showAlertOnMismatch}
+                                        onChange={() => setShowAlertOnMismatch(prev => !prev)}
+                                        className="w-4 h-4"
+                                    />
+                                </div>
+                                <input
+                                    type="search"
+                                    placeholder="Search"
+                                    value={scannedPackageListSearch}
+                                    onChange={(event) => {
+                                        setScannedPackageListSearch(event.target.value);
+                                    }}
+                                    className="p-2 text-sm border rounded outline-none border-neutral-300"
+                                />
+                            </div>
+
+                            <div className="h-[calc(100vh-12rem)] overflow-y-scroll border-b border-t border-neutral-300">
+                                {response && <ScannedList
+                                    list={Array.from(scannedPackageListMap.values())
+                                        .filter(scannedPackageListItem => scannedPackageListItem.package_id.includes(scannedPackageListSearch))
+                                        .reverse()}
+                                    type={response.type}
+                                    handleDelete={handleDelete}
+                                    handleCancel={handleCancel}
+                                />}
+                            </div>
+                        </div>
+                    </div>
+
+
+                    {response && <TaskPdfReport
                         task_id={response.task_id}
-                        courier={response.courier}
-                        channel={response.channel}
                         type={response.type}
+                        created_at={response.created_at}
+                        channel={response.channel}
+                        courier={response.courier}
                         delex_name={response.delex_name}
                         delex_contact={response.delex_contact}
                         vehicle_no={response.vehicle_no}
-                        created_by={response.created_by}
-                        created_at={response.created_at}
-                        scanned={scannedPackageListMap.size}
-                        cancelled={[...scannedPackageListMap.values()].filter(obj => obj.cancelled).length}
-                        printReport={printReport}
+                        packages={response.packages}
                     />}
-
-                    <div className="mb-2 text-xl font-bold">Scan Here</div>
-                    <form className="p-2 border rounded border-neutral-300" onSubmit={handleSubmit}>
-                        <div className="flex gap-2 mb-2">
-                            <input
-                                ref={packageIdInputRef}
-                                type="text"
-                                name="package_id"
-                                placeholder="Package ID"
-                                value={scanPackageFormData.package_id}
-                                onChange={handleInputChange}
-                                required
-                                pattern="^\w{6,}$"
-                                title="Minimum 6 digits required"
-                                className="w-full p-2 text-sm border rounded border-neutral-300 outline-red-500"
-                            />
-                            <button type="submit" className="text-sm btn-primary">Submit</button>
-                        </div>
-                        <div>
-                            <input
-                                placeholder="Remarks"
-                                name="remarks"
-                                value={scanPackageFormData.remarks}
-                                onChange={handleInputChange}
-                                className="w-full p-2 text-sm border rounded border-neutral-300"
-                            />
-                        </div>
-                        <div className={`flex items-center ${tasktype === "outgoing" ? "justify-between" : "justify-end"}`}>
-                            {(tasktype === "outgoing") && <div className="flex items-center mt-2">
-                                <input
-                                    type="checkbox"
-                                    id="cancelled"
-                                    name="cancelled"
-                                    value="cancel"
-                                    onChange={() => {
-                                        setScanPackageFormData(prev => ({
-                                            ...prev,
-                                            cancelled: !prev.cancelled
-                                        }));
-                                    }}
-                                    checked={scanPackageFormData.cancelled}
-                                    className="w-4 h-4 accent-red-500"
+                </div>
+                {user?.role === "admin" &&
+                    <div className="flex justify-between p-8 pb-8 gap-x-16">
+                        <div className="w-4/12">
+                            <div className="text-xl font-bold mb-2">
+                                <label htmlFor="packages">Save Expected Package IDs</label>
+                            </div>
+                            <form onSubmit={handleExpectedPackageSubmit} className="p-2 border rounded border-neutral-300">
+                                <textarea
+                                    name="expectedPackages"
+                                    id="expectedPackages"
+                                    value={expectedPackagesInput}
+                                    onChange={(e) => setExpectedPackagesInput(e.target.value)}
+                                    placeholder="Enter expected package IDs (one per line)"
+                                    required
+                                    className="w-full p-2 border rounded border-neutral-300"
                                 />
-                                <label htmlFor="cancelled" className="px-1 text-sm font-medium text-red-600 rounded cursor-pointer select-none">Cancelled</label>
+                                <button type="submit" className="mt-2 text-sm btn-primary">Submit Expected Packages</button>
+                            </form>
 
-                            </div>}
                         </div>
-                    </form>
-                </div>
-                <div className="w-8/12">
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="text-xl font-bold">Scanned List</div>
-                        <input
-                            type="search"
-                            placeholder="Search"
-                            value={scannedPackageListSearch}
-                            onChange={(event) => {
-                                setScannedPackageListSearch(event.target.value);
-                            }}
-                            className="p-2 text-sm border rounded outline-none border-neutral-300"
-                        />
+                        <div className="w-8/12">
+                            <h2 className="text-xl font-bold mb-2">Expected Packages</h2>
+                            <div className="h-64 overflow-y-scroll border border-neutral-300 rounded p-2">
+                                {expectedPackages.size === 0 ? (
+                                    <p className="text-gray-500">No expected packages.</p>
+                                ) : (
+                                    Array.from(expectedPackages.entries()).map(([packageId, scanned]) => (
+                                        <div key={packageId} className={`p-2 rounded mb-1 ${scanned ? "bg-green-200" : "bg-red-200"}`}>
+                                            {packageId} {scanned ? "(Scanned ✅)" : "(Not Scanned ❌)"}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
                     </div>
-                    <div className="h-[calc(100vh-12rem)] overflow-y-scroll border-b border-t border-neutral-300">
-                        {response && <ScannedList
-                            list={Array.from(scannedPackageListMap.values())
-                                .filter(scannedPackageListItem => scannedPackageListItem.package_id.includes(scannedPackageListSearch))
-                                .reverse()}
-                            type={response.type}
-                            handleDelete={handleDelete}
-                            handleCancel={handleCancel}
-                        />}
-                    </div>
-                </div>
+                }
             </div>
-            {response && <TaskPdfReport
-                task_id={response.task_id}
-                type={response.type}
-                created_at={response.created_at}
-                channel={response.channel}
-                courier={response.courier}
-                delex_name={response.delex_name}
-                delex_contact={response.delex_contact}
-                vehicle_no={response.vehicle_no}
-                packages={response.packages}
-            />}
-        </div>
     )
 }
 

@@ -10,6 +10,7 @@ type TUser = {
 type TPackage = {
     _id: string,
     package_id: string,
+    status: string,
     courier: string,
     channel: string,
     type: "incoming" | "outgoing",

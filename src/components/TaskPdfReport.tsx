@@ -76,6 +76,7 @@ const TaskPdfReport = (props: TTaskPdfReportProps) => {
                     <tr>
                         <th className="py-1">S.No.</th>
                         <th className="py-1">Package ID</th>
+                        <th className="py-1">Status</th>
                         <th className="py-1">Scanned At</th>
                         <th className="py-1">Executive</th>
                         <th className="py-1">Remarks</th>
@@ -86,6 +87,7 @@ const TaskPdfReport = (props: TTaskPdfReportProps) => {
                         return <tr key={item._id} className={`border ${item.cancelled ? "bg-red-100" : "*:"}`}>
                             <td className="py-[2px]">{i + 1}</td>
                             <td className="py-[2px]">{item.package_id}</td>
+                            <td className="py-[2px]">{item.status}</td>
                             <td className="py-[2px]">{DDMMYYHHMMSS(item.created_at)}</td>
                             <td className="py-[2px]">{item.executive.name}</td>
                             <td className="py-[2px]"><span>{item.cancelled && "CAN"}</span>{item.remarks}</td>

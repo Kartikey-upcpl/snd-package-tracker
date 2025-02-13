@@ -20,32 +20,45 @@ const ExecutiveTaskForm = () => {
         type: tasktype,
         vehicle_no: "",
         delex_name: "",
-        delex_contact: ""
+        delex_contact: "",
+        packages: ""
     });
 
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         try {
+            const packageList = formData.packages
+                .split("\n")
+                .map(id => id.trim())
+                .filter(id => id); // Remove empty lines
+
             const response = await fetch(new URL("/v1/tasks/", import.meta.env.VITE_API_BASE_URL), {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`,
                 },
-                body: JSON.stringify(formData)
+                body: JSON.stringify({ ...formData, packages: packageList }) // Send packages as an array
             });
+            const result = await response.json();
+
             if (!response.ok) {
-                if (CODE[response.status]) toast.error(CODE[response.status].message);
+                if (response.status === 400 && result.conflict_packages) {
+                    toast.error(`Duplicate packages found: ${result.conflict_packages.join(", ")}`);
+                } else if (CODE[response.status]) {
+                    toast.error(CODE[response.status].message);
+                }
                 if (response.status === 401) logout();
                 console.error(`Request to POST:/v1/tasks failed with status ${response.status}`, response);
                 return;
             }
-            toast.success("Task created");
+
+            toast.success("Task created with predefined packages");
             navigate(-1);
         } catch (err) {
             console.error(`Request to POST:/v1/tasks failed with error ${err}`);
         }
-    }
+    };
 
     const handleInputChange = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         setFormData(prev => {
@@ -124,7 +137,7 @@ const ExecutiveTaskForm = () => {
                         className="w-64 p-2 border rounded-tr rounded-br outline-none border-neutral-300"
                     />
                 </div>
-                <div className="flex mb-8">
+                <div className="flex mb-2">
                     <div className="p-2 font-medium border border-r-0 rounded-tl rounded-bl w-28 border-neutral-300 bg-neutral-100">
                         <label htmlFor="delex_contact">Delivery Ph.</label>
                     </div>

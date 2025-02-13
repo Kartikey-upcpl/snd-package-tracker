@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 type TAuthUser = {
     sub: string,
-    role: "root" | "manager" | "administrator" | "executive",
+    role: "root" | "manager" | "administrator" | "executive" | "admin",
     name: string,
     username: string
 }

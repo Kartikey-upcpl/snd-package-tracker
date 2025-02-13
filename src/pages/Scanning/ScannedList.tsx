@@ -8,6 +8,7 @@ type TScannedListProps = {
     list: {
         _id?: string,
         package_id: string,
+        status: string,
         timestamp: Date,
         remarks?: string,
         cancelled?: boolean,
@@ -25,6 +26,7 @@ const ScannedList = ({ list, type, handleDelete, handleCancel }: TScannedListPro
                 <tr>
                     <th className="py-3">S.No.</th>
                     <th className="py-3">Package ID</th>
+                    <th className="py-3">Status</th>
                     <th className="py-3">Scanned At</th>
                     <th className="py-3">Remarks</th>
                     <th className="py-3"><MdOutlineCloudUpload /></th>
@@ -42,6 +44,7 @@ const ScannedList = ({ list, type, handleDelete, handleCancel }: TScannedListPro
                         <tr key={item.package_id} className={`border ${item.cancelled ? type === "incoming" ? "bg-yellow-100" : "bg-red-100" : ""}`}>
                             <td className="py-2">{i + 1}</td>
                             <td className="py-2">{item.package_id}</td>
+                            <td className={`py-2 ${item?.status === "notmatched" ? "bg-[#fecaca]" : "bg-[#bbf7d0]"} text-black`}>{item.status}</td>
                             <td className="py-2">{DDMMYYHHMMSS(item.timestamp)}</td>
                             <td className="py-2 max-w-40">{item.remarks}</td>
                             <td className="py-2">

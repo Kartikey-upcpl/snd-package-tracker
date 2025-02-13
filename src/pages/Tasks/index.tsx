@@ -26,7 +26,7 @@ const Tasks = () => {
     const handleDelete = async (id: string, task_id: string) => {
         if (confirm(`Confirm delete task (ID: ${task_id})?`)) {
             try {
-                const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/v1/tasks/${id}`, {
+                const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}v1/tasks/${id}`, {
                     method: "DELETE",
                     headers: {
                         "Content-Type": "application/json",
@@ -49,7 +49,7 @@ const Tasks = () => {
 
     const handleStatusUpdate = async (id: string, task_id: string, is_open: boolean) => {
         try {
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/v1/tasks/${id}`, {
+            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}v1/tasks/${id}`, {
                 method: "PATCH",
                 headers: {
                     "Content-Type": "application/json",
