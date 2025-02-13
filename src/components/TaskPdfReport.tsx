@@ -89,7 +89,7 @@ const TaskPdfReport = (props: TTaskPdfReportProps) => {
                             <td className="py-[2px]">{item.package_id}</td>
                             <td className="py-[2px]">{item.status}</td>
                             <td className="py-[2px]">{DDMMYYHHMMSS(item.created_at)}</td>
-                            <td className="py-[2px]">{item.executive.name}</td>
+                            <td className="py-[2px]">{item?.executive?.name}</td>
                             <td className="py-[2px]"><span>{item.cancelled && "CAN"}</span>{item.remarks}</td>
                         </tr>
                     })}

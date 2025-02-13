@@ -10,7 +10,7 @@ const OpenTasks = () => {
     const [search, setSearch] = useState<string>("");
     const tasktype: ("outgoing" | "incoming") = location.pathname.split("/")[1] === "incoming" ? "incoming" : "outgoing";
     const { response, loading } = useFetch<{ metadata: {}, data: TTaskPopulated[] } | null>(`/v1/tasks?is_open=true&type=${tasktype}`, null);
-
+    // console.log("responseincoming", response)
     return (
         loading ? <PageLoading /> : <div className="p-8">
             <div className="flex justify-between mb-4">

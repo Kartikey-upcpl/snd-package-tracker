@@ -14,7 +14,7 @@ const OpenTaskCard = (props: TTaskPopulated) => {
                         </div>
                     </div>
                     <div className="text-lg font-bold">{props.courier} - {props.channel}</div>
-                    <div className="text-xs font-medium text-neutral-700">Ex.: {props.created_by.name} ({props.created_by.username})</div>
+                    <div className="text-xs font-medium text-neutral-700">Ex.: {props.created_by?.name} ({props.created_by?.username})</div>
                 </div>
             </Link>
         </div>

@@ -34,10 +34,10 @@ const Scanning = () => {
     const location = useLocation();
     const { token, logout, user } = useAuth();
     const packageIdInputRef = useRef<HTMLInputElement | null>(null);
-
     const [scannedPackageListSearch, setScannedPackageListSearch] = useState<string>("");
     const [scannedPackageListMap, setScannedPackageListMap] = useState<Map<string, TScannedPackageListRecord>>(new Map());
     const [expectedPackages, setExpectedPackages] = useState<Map<string, boolean>>(new Map());
+    // console.log("expecteed", expectedPackages)
     const [expectedPackagesInput, setExpectedPackagesInput] = useState<string>("");
     const [scanPackageFormData, setScanPackageFormData] = useState<TPostPackageBody>({
         task_id: id as string,
@@ -54,13 +54,13 @@ const Scanning = () => {
 
     useEffect(() => {
         if (response && response.packages) {
-            console.log("📥 Response Updated:", response.packages);
+            // console.log("📥 Response Updated:", response.packages);
 
             const matched = response.packages.filter(pkg => pkg.status === "matched").length;
             const notMatched = response.packages.filter(pkg => pkg.status === "notmatched").length;
 
-            console.log("✅ Matched Count:", matched);
-            console.log("❌ Not Matched Count:", notMatched);
+            // console.log("✅ Matched Count:", matched);
+            // console.log("❌ Not Matched Count:", notMatched);
 
             // ✅ Ensure state updates correctly
             setMatchedCount(matched);
@@ -126,7 +126,7 @@ const Scanning = () => {
                     return new Map(updatedScannedMap); // Ensure React detects the state change
                 });
 
-                console.log("✅ Expected Packages Fetched & Scanned List Updated");
+                // console.log("✅ Expected Packages Fetched & Scanned List Updated");
 
             } catch (error) {
                 console.error("Error fetching expected packages:", error);
@@ -164,7 +164,7 @@ const Scanning = () => {
                     "Content-Type": "application/json",
                     "Authorization": `Bearer ${token}`
                 },
-                body: JSON.stringify({ task_id: id, package_ids: packageIds, executive: user?.sub })
+                body: JSON.stringify({ task_id: id, package_ids: packageIds.map(id => id.toLowerCase()), executive: user?.sub })
             });
 
             if (!response.ok) {
@@ -202,7 +202,6 @@ const Scanning = () => {
         }
     };
 
-
     const handleSubmit = async (event: FormEvent) => {
         event.preventDefault();
         let packageId = scanPackageFormData.package_id.trim();
@@ -211,12 +210,7 @@ const Scanning = () => {
             packageId += "_"; // Append "_" to outgoing packages
         }
 
-        // Check if package is already scanned (case-insensitive)
-        if (
-            scannedPackageListMap.has(packageId) ||
-            scannedPackageListMap.has(packageId.toUpperCase()) ||
-            scannedPackageListMap.has(packageId.toLowerCase())
-        ) {
+        if (scannedPackageListMap.has(packageId)) {
             new Audio(beep_error).play();
             toast.error(`Package ${packageId} is already scanned!`);
             setScanPackageFormData({ task_id: id as string, package_id: "", remarks: "", cancelled: false });
@@ -224,40 +218,16 @@ const Scanning = () => {
         }
 
         // Determine if package exists in expected list
-        const isMatched = expectedPackages.has(packageId);
+        const isMatched = Array.from(expectedPackages).some(([pkg]) => pkg.toLowerCase() === packageId.toLowerCase());
         const status = isMatched ? "matched" : "notmatched";
 
         if (!isMatched) {
             new Audio(beep_error).play();
-
-            if (showAlertOnMismatch) {
-                // Show a blocking alert
-                window.alert(`❌ ${packageId} is NOT in the expected list!`);
-            } else {
-                // Show toast instead of alert
-                toast.error(`❌ ${packageId} is NOT in the expected list!`);
-            }
-
-            // ✅ Refocus on the package ID input field after the alert or toast
+            showAlertOnMismatch ? window.alert(`❌ ${packageId} is NOT in the expected list!`) : toast.error(`❌ ${packageId} is NOT in the expected list!`);
             packageIdInputRef.current?.focus();
         } else {
             new Audio(beep_alert).play();
         }
-
-
-
-        // Add package to scanned list with match status (pending sync)
-        setScannedPackageListMap(prev => {
-            prev.set(packageId, {
-                package_id: packageId,
-                timestamp: new Date(),
-                remarks: scanPackageFormData.remarks,
-                cancelled: scanPackageFormData.cancelled,
-                synced: false,
-                status
-            });
-            return new Map(prev);
-        });
 
         // Clear input and refocus
         setScanPackageFormData({ task_id: id as string, package_id: "", remarks: "", cancelled: false });
@@ -266,7 +236,7 @@ const Scanning = () => {
         // Prepare data for backend submission
         const postPackageRequestData = {
             task_id: id,
-            package_id: packageId,
+            package_id: packageId.toLocaleLowerCase(),
             remarks: scanPackageFormData.remarks,
             cancelled: scanPackageFormData.cancelled,
             status // Send status from frontend
@@ -296,7 +266,7 @@ const Scanning = () => {
             setScannedPackageListMap(prev => (
                 new Map(prev.set(json.data.package_id, {
                     _id: json.data._id,
-                    package_id: json.data.package_id,
+                    package_id: json.data.package_id.toLocaleLowerCase(),
                     timestamp: json.data.created_at,
                     remarks: json.data.remarks || "NA",
                     cancelled: response.status === 201 ? json.data.cancelled : true,
@@ -409,12 +379,28 @@ const Scanning = () => {
     useEffect(() => {
         setExpectedPackages(prev => {
             const updated = new Map(prev);
+
             scannedPackageListMap.forEach((_, package_id) => {
-                if (updated.has(package_id)) updated.set(package_id, true); // Mark as scanned
+                // Case-insensitive check for scanned packages
+                for (let key of updated.keys()) {
+                    if (key.toLowerCase() === package_id.toLowerCase()) {
+                        updated.set(key, true);
+                    }
+                }
             });
+
+            // ✅ New Logic: Case-insensitive match for newly added expected packages
+            prev.forEach((_, package_id) => {
+                for (let key of scannedPackageListMap.keys()) {
+                    if (package_id.toLowerCase() === key.toLowerCase()) {
+                        updated.set(package_id, true);
+                    }
+                }
+            });
+
             return updated;
         });
-    }, [scannedPackageListMap]);
+    }, [scannedPackageListMap, expectedPackages]);
 
     return (
         loading && count === 0 ? <PageLoading /> :
