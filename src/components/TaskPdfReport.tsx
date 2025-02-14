@@ -16,6 +16,18 @@ type TTaskPdfReportProps = {
 const TaskPdfReport = (props: TTaskPdfReportProps) => {
     return (
         <div className="visible hidden w-full text-xs print:block print:absolute print:top-0 print:left-0">
+            <div>
+                <style>
+                    {`
+      @media print {
+        .bg-red-200 { background-color: #fecaca !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        .bg-green-200 { background-color: #bbf7d0 !important; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      }
+    `}
+                </style>
+                {/* Existing component code */}
+            </div>
+
             <div className="flex items-center justify-between h-10 my-4">
                 <img src={logo} alt="staranddaisy" className="h-full" />
                 <div>
@@ -87,7 +99,7 @@ const TaskPdfReport = (props: TTaskPdfReportProps) => {
                         return <tr key={item._id} className={`border ${item.cancelled ? "bg-red-100" : "*:"}`}>
                             <td className="py-[2px]">{i + 1}</td>
                             <td className="py-[2px]">{item.package_id}</td>
-                            <td className="py-[2px]">{item.status}</td>
+                            <td className={`py-2 ${item.status === "notmatched" ? "bg-red-200" : "bg-green-200"}`}>{item.status}</td>
                             <td className="py-[2px]">{DDMMYYHHMMSS(item.created_at)}</td>
                             <td className="py-[2px]">{item?.executive?.name}</td>
                             <td className="py-[2px]"><span>{item.cancelled && "CAN"}</span>{item.remarks}</td>
