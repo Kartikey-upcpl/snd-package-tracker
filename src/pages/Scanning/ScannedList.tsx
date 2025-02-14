@@ -20,6 +20,7 @@ type TScannedListProps = {
 }
 
 const ScannedList = ({ list, type, handleDelete, handleCancel }: TScannedListProps) => {
+    // console.log("list", list)
     return (
         <table className="w-full text-center">
             <thead className="border border-t-0 bg-neutral-100 border-neutral-300">

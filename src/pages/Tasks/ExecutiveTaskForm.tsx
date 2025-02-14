@@ -53,7 +53,7 @@ const ExecutiveTaskForm = () => {
                 return;
             }
 
-            toast.success("Task created with predefined packages");
+            toast.success("Task created successfully");
             navigate(-1);
         } catch (err) {
             console.error(`Request to POST:/v1/tasks failed with error ${err}`);
@@ -104,8 +104,8 @@ const ExecutiveTaskForm = () => {
                         className="w-64 p-2 border rounded-tr rounded-br outline-none border-neutral-300"
                     >
                         <option value="" hidden>Select</option>
-                        {config.courier?.map(item => {
-                            return <option value={item}>{item}</option>
+                        {config.courier?.map((item, index) => {
+                            return <option key={index} value={item}>{item}</option>
                         })}
                     </select>
                 </div>

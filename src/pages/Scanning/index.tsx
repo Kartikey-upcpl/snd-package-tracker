@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, FormEvent } from "react";
+import { useState, useEffect, useRef, FormEvent, useMemo } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import ScannedList from "./ScannedList";
@@ -37,7 +37,7 @@ const Scanning = () => {
     const [scannedPackageListSearch, setScannedPackageListSearch] = useState<string>("");
     const [scannedPackageListMap, setScannedPackageListMap] = useState<Map<string, TScannedPackageListRecord>>(new Map());
     const [expectedPackages, setExpectedPackages] = useState<Map<string, boolean>>(new Map());
-    // console.log("expecteed", expectedPackages)
+    // console.log("scannedPackageListMap", scannedPackageListMap)
     const [expectedPackagesInput, setExpectedPackagesInput] = useState<string>("");
     const [scanPackageFormData, setScanPackageFormData] = useState<TPostPackageBody>({
         task_id: id as string,
@@ -47,26 +47,25 @@ const Scanning = () => {
     });
     const tasktype: ("outgoing" | "incoming") = location.pathname.split("/")[1] === "incoming" ? "incoming" : "outgoing";
     const { response, loading, count, refresh } = useFetch<TTaskPopulated | null>(`/v1/tasks/${id}?fields=package_id,cancelled,remarks,created_at`, null);
-    const [matchedCount, setMatchedCount] = useState(0);
-    const [notMatchedCount, setNotMatchedCount] = useState(0);
+    // console.log("responsePackage", response?.packages.map((pkg => pkg.status)))
+    // const [matchedCount, setMatchedCount] = useState(0);
+    // const [notMatchedCount, setNotMatchedCount] = useState(0);
     const [showAlertOnMismatch, setShowAlertOnMismatch] = useState<boolean>(true);
 
+    const matchedCount = useMemo(() => {
+        return Array.from(scannedPackageListMap.values()).filter(pkg => pkg.status === "matched").length;
+    }, [scannedPackageListMap]);
 
-    useEffect(() => {
-        if (response && response.packages) {
-            // console.log("📥 Response Updated:", response.packages);
+    const notMatchedCount = useMemo(() => {
+        return Array.from(scannedPackageListMap.values()).filter(pkg => pkg.status === "notmatched").length;
+    }, [scannedPackageListMap]);
 
-            const matched = response.packages.filter(pkg => pkg.status === "matched").length;
-            const notMatched = response.packages.filter(pkg => pkg.status === "notmatched").length;
+    const updatedPackages = response ? response.packages.map(pkg => ({
+        ...pkg,
+        status: scannedPackageListMap.get(pkg.package_id)?.status || "notmatched"
+    })) : [];
 
-            // console.log("✅ Matched Count:", matched);
-            // console.log("❌ Not Matched Count:", notMatched);
 
-            // ✅ Ensure state updates correctly
-            setMatchedCount(matched);
-            setNotMatchedCount(notMatched);
-        }
-    }, [response]); // ✅ Re-run this effect whenever `response` changes
 
     // populate scanned packages list with pre-scanned packages
     useEffect(() => {
@@ -261,7 +260,8 @@ const Scanning = () => {
             }
 
             const json: { message: string, data: TPackage } = await response.json();
-
+            // console.log("json", json)
+            // console.log("response", response)
             // Update scanned package list with server response (Synced ✅)
             setScannedPackageListMap(prev => (
                 new Map(prev.set(json.data.package_id, {
@@ -400,7 +400,7 @@ const Scanning = () => {
 
             return updated;
         });
-    }, [scannedPackageListMap, expectedPackages]);
+    }, [scannedPackageListMap]);
 
     return (
         loading && count === 0 ? <PageLoading /> :
@@ -519,7 +519,7 @@ const Scanning = () => {
                         delex_name={response.delex_name}
                         delex_contact={response.delex_contact}
                         vehicle_no={response.vehicle_no}
-                        packages={response.packages}
+                        packages={updatedPackages}
                     />}
                 </div>
                 {user?.role === "admin" &&
