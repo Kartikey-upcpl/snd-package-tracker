@@ -18,6 +18,7 @@ type TTaskDetailsProps = {
     cancelled: number,
     expected_scanned: number,
     notMatchedCount: number,
+    falseCount: number,
     matchedCount: number
     printReport: () => Promise<void>
 };
@@ -74,12 +75,16 @@ const TaskDetails = (props: TTaskDetailsProps) => {
                     <div className="text-3xl font-bold">{props.expected_scanned}</div>
                 </div>
                 <div className="p-2 text-center bg-red-200 border border-neutral-300">
-                    <div className="font-medium">Not Match</div>
+                    <div className="font-medium">Scanned/Not Match</div>
                     <div className="text-3xl font-bold">{props.notMatchedCount}</div>
                 </div>
                 <div className="p-2 text-center bg-green-200 border border-x-0 border-neutral-300">
                     <div className="font-medium">Total Match</div>
                     <div className="text-3xl font-bold">{props.matchedCount}</div>
+                </div>
+                <div className="p-2 text-center bg-red-200 border border-neutral-300">
+                    <div className="font-medium">Expected/Not Match</div>
+                    <div className="text-3xl font-bold">{props.falseCount}</div>
                 </div>
             </div>
             <div className="px-4 py-2 text-xs font-medium bg-neutral-100">

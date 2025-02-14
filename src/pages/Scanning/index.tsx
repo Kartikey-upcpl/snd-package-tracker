@@ -37,7 +37,19 @@ const Scanning = () => {
     const [scannedPackageListSearch, setScannedPackageListSearch] = useState<string>("");
     const [scannedPackageListMap, setScannedPackageListMap] = useState<Map<string, TScannedPackageListRecord>>(new Map());
     const [expectedPackages, setExpectedPackages] = useState<Map<string, boolean>>(new Map());
-    // console.log("scannedPackageListMap", scannedPackageListMap)
+    const [falseCount, setFalseCount] = useState(0);
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            let count = 0;
+            expectedPackages.forEach((value) => {
+                if (!value) count++;
+            });
+            setFalseCount(count);
+        }, 300); // 300ms delay
+
+        return () => clearTimeout(timeoutId); // Cleanup timeout on re-render
+    }, [expectedPackages]);
+
     const [expectedPackagesInput, setExpectedPackagesInput] = useState<string>("");
     const [scanPackageFormData, setScanPackageFormData] = useState<TPostPackageBody>({
         task_id: id as string,
@@ -50,7 +62,7 @@ const Scanning = () => {
     // console.log("responsePackage", response?.packages.map((pkg => pkg.status)))
     // const [matchedCount, setMatchedCount] = useState(0);
     // const [notMatchedCount, setNotMatchedCount] = useState(0);
-    const [showAlertOnMismatch, setShowAlertOnMismatch] = useState<boolean>(true);
+    const [showAlertOnMismatch, setShowAlertOnMismatch] = useState<boolean>(false);
 
     const matchedCount = useMemo(() => {
         return Array.from(scannedPackageListMap.values()).filter(pkg => pkg.status === "matched").length;
@@ -421,6 +433,7 @@ const Scanning = () => {
                                 scanned={scannedPackageListMap.size}
                                 notMatchedCount={notMatchedCount}
                                 matchedCount={matchedCount}
+                                falseCount={falseCount}
                                 expected_scanned={expectedPackages.size}
                                 cancelled={[...scannedPackageListMap.values()].filter(obj => obj.cancelled).length}
                                 printReport={printReport}

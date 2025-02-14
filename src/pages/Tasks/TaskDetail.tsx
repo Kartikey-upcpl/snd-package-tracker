@@ -121,6 +121,7 @@ const TaskDetails = () => {
                         <th className="py-3">S.No.</th>
                         <th className="py-3">Package ID</th>
                         <th className="py-3">Status</th>
+                        <th className="py-3">Matched Status</th>
                         <th className="py-3">Scanned At</th>
                         <th className="py-3">Executive</th>
                         <th className="py-3">Remarks</th>
@@ -140,6 +141,7 @@ const TaskDetails = () => {
                                 <td className="py-2">{i + 1}</td>
                                 <td className="py-2">{pkg.package_id}</td>
                                 <td className="py-2">{pkg.cancelled ? "Cancel" : pkg.type === "incoming" ? "Return" : "Dispatch"}</td>
+                                <td className={`py-2 ${pkg.status === "notmatched" ? "bg-red-200" : "bg-green-200"}`}>{pkg.status}</td>
                                 <td className="py-2">{DDMMYYHHMMSS(pkg.created_at)}</td>
                                 <td className="py-2">{pkg.executive?.name} ({pkg.executive?.username})</td>
                                 <td className="py-2">{pkg.remarks}</td>
